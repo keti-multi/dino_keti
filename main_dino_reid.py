@@ -39,7 +39,7 @@ torchvision_archs = sorted(name for name in torchvision_models.__dict__
     and callable(torchvision_models.__dict__[name]))
 
 def get_args_parser():
-    parser = argparse.ArgumentParser('DINO', add_help=False)
+    parser = argparse.ArgumentParser('DINO_Reid', add_help=False)
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
@@ -115,7 +115,10 @@ def get_args_parser():
     parser.add_argument('--local_crops_scale', type=float, nargs='+', default=(0.05, 0.4),
         help="""Scale range of the cropped image before resizing, relatively to the origin image.
         Used for small local view cropping of multi-crop.""")
-
+    ## reid shape image params
+    parser.add_argument('--img_size', type=int, nargs='+', default=(224, 224),
+    help="""image size of the cropped image before resizing, relatively to the origin image.
+        Used for reid task global view cropping of multi-crop.""")
     # Misc
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
@@ -137,10 +140,11 @@ def train_dino(args):
     cudnn.benchmark = True
 
     # ============ preparing data ... ============
-    transform = DataAugmentationDINO(
+    transform = DataAugmentationDINOreid(
         args.global_crops_scale,
         args.local_crops_scale,
         args.local_crops_number,
+        args.img_size
     )
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
@@ -162,8 +166,9 @@ def train_dino(args):
         student = vits.__dict__[args.arch](
             patch_size=args.patch_size,
             drop_path_rate=args.drop_path_rate,  # stochastic depth
+            img_size=args.img_size
         )
-        teacher = vits.__dict__[args.arch](patch_size=args.patch_size)
+        teacher = vits.__dict__[args.arch](patch_size=args.patch_size, img_size=args.img_size)
         embed_dim = student.embed_dim
     # if the network is a XCiT
     elif args.arch in torch.hub.list("facebookresearch/xcit:main"):
@@ -416,7 +421,7 @@ class DINOLoss(nn.Module):
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
 
 
-class DataAugmentationDINO(object):
+class DataAugmentationDINOreid(object):
     def __init__(self, global_crops_scale, local_crops_scale, local_crops_number,shape=224):
         flip_and_color_jitter = transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
@@ -449,7 +454,7 @@ class DataAugmentationDINO(object):
         # transformation for the local small crops
         self.local_crops_number = local_crops_number
         self.local_transfo = transforms.Compose([
-            transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),
+            transforms.RandomResizedCrop([shape[0]//2,shape[1]//2], scale=local_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
             utils.GaussianBlur(p=0.5),
             normalize,

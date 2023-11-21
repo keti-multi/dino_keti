@@ -116,9 +116,12 @@ class Block(nn.Module):
 class PatchEmbed(nn.Module):
     """ Image to Patch Embedding
     """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768):
+    def __init__(self, img_size=[224], patch_size=16, in_chans=3, embed_dim=768):
         super().__init__()
-        num_patches = (img_size // patch_size) * (img_size // patch_size)
+        if len(img_size) == 1:
+            num_patches = (img_size[0] // patch_size) * (img_size[0] // patch_size)
+        elif len(img_size)==2: # reid case
+            num_patches = (img_size[0] // patch_size) * (img_size[1] // patch_size)
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = num_patches
@@ -131,6 +134,7 @@ class PatchEmbed(nn.Module):
         return x
 
 
+
 class VisionTransformer(nn.Module):
     """ Vision Transformer """
     def __init__(self, img_size=[224], patch_size=16, in_chans=3, num_classes=0, embed_dim=768, depth=12,
@@ -138,9 +142,9 @@ class VisionTransformer(nn.Module):
                  drop_path_rate=0., norm_layer=nn.LayerNorm, **kwargs):
         super().__init__()
         self.num_features = self.embed_dim = embed_dim
-
+        self.img_size = img_size
         self.patch_embed = PatchEmbed(
-            img_size=img_size[0], patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
+            img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -174,10 +178,23 @@ class VisionTransformer(nn.Module):
     def interpolate_pos_encoding(self, x, w, h):
         npatch = x.shape[1] - 1
         N = self.pos_embed.shape[1] - 1
+        if len(self.img_size)==1:
+            original_num_patches_vertically = math.sqrt(N)
+            original_num_patches_horizontally = math.sqrt(N)
+
+
+        elif len(self.img_size)==2:
+            ratio = self.img_size[0]//self.img_size[1]
+            original_num_patches_vertically = int(ratio*math.sqrt(N//ratio))
+            original_num_patches_horizontally= int(math.sqrt(N//ratio))
         if npatch == N and w == h:
             return self.pos_embed
         class_pos_embed = self.pos_embed[:, 0]
         patch_pos_embed = self.pos_embed[:, 1:]
+        # 예상되는 패치의 개수 계산
+        num_patches_vertically = h // self.patch_embed.patch_size
+        num_patches_horizontally = w // self.patch_embed.patch_size
+
         dim = x.shape[-1]
         w0 = w // self.patch_embed.patch_size
         h0 = h // self.patch_embed.patch_size
@@ -185,16 +202,18 @@ class VisionTransformer(nn.Module):
         # see discussion at https://github.com/facebookresearch/dino/issues/8
         w0, h0 = w0 + 0.1, h0 + 0.1
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
-            scale_factor=(w0 / math.sqrt(N), h0 / math.sqrt(N)),
+            patch_pos_embed.reshape(1, original_num_patches_vertically, original_num_patches_horizontally, dim).permute(0, 3, 1, 2),
+            scale_factor=(num_patches_horizontally / original_num_patches_horizontally, num_patches_vertically / original_num_patches_vertically),
             mode='bicubic',
         )
-        assert int(w0) == patch_pos_embed.shape[-2] and int(h0) == patch_pos_embed.shape[-1]
+        assert patch_pos_embed.shape[-2] == num_patches_vertically and patch_pos_embed.shape[
+            -1] == num_patches_horizontally
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def prepare_tokens(self, x):
-        B, nc, w, h = x.shape
+        # B, nc, w, h = x.shape
+        B, nc, h, w = x.shape
         x = self.patch_embed(x)  # patch linear embedding
 
         # add the [CLS] token to the embed patch tokens

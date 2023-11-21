@@ -75,22 +75,41 @@
 #--local_crops_number 10 \
 
 # train dino with reid shape
-python main_dino.py --arch vit_base \
+#python main_dino_reid.py --arch vit_base \
+#--data_path /data/keti/syh/ReID/MSMT17 \
+#--output_dir /data/keti/syh/exp/DINO_MSMT17_train_reid_shape_256_112_ratio_2_1 \
+#--teacher_temp 0.07 \
+#--warmup_teacher_temp_epochs 50 \
+#--use_fp16 False \
+#--clip_grad 0.3 \
+#--batch_size_per_gpu 128 \
+#--epochs 400 \
+#--freeze_last_layer 3 \
+#--lr 0.00075 \
+#--min_lr 2e-06 \
+#--global_crops_scale 0.25 1.0 \
+#--local_crops_scale 0.05 0.25 \
+#--local_crops_number 10 \
+#--img_size 256 128
+
+# 23.11.21 reid image dataset is narrow view than imagenet dbca
+# study from S
+python main_dino_reid.py --arch vit_base \
 --data_path /data/keti/syh/ReID/MSMT17 \
---output_dir /data/keti/syh/exp/DINO_MSMT17_train_reid_shape \
+--output_dir /data/keti/syh/exp/DINO_MSMT17_train_reid_shape_256_112_ratio_2_1 \
 --teacher_temp 0.07 \
 --warmup_teacher_temp_epochs 50 \
 --use_fp16 False \
 --clip_grad 0.3 \
---batch_size_per_gpu 64 \
+--batch_size_per_gpu 128 \
 --epochs 400 \
 --freeze_last_layer 3 \
 --lr 0.00075 \
 --min_lr 2e-06 \
---global_crops_scale 0.25 1.0 \
---local_crops_scale 0.05 0.25 \
+--global_crops_scale 0.5 1.0 \
+--local_crops_scale 0.05 0.5 \
 --local_crops_number 10 \
-
+--img_size 256 128
 
 
 
