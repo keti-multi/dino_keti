@@ -101,7 +101,7 @@ python main_dino_reid.py --arch vit_base \
 --warmup_teacher_temp_epochs 50 \
 --use_fp16 False \
 --clip_grad 0.3 \
---batch_size_per_gpu 128 \
+--batch_size_per_gpu 80 \
 --epochs 400 \
 --freeze_last_layer 3 \
 --lr 0.00075 \
