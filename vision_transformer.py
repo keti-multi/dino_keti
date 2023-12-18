@@ -116,17 +116,20 @@ class Block(nn.Module):
 class PatchEmbed(nn.Module):
     """ Image to Patch Embedding
     """
-    def __init__(self, img_size=[224], patch_size=16, in_chans=3, embed_dim=768):
+    def __init__(self, img_size=[224], patch_size=16, in_chans=3, embed_dim=768,stride_size=16):
         super().__init__()
         if len(img_size) == 1:
             num_patches = (img_size[0] // patch_size) * (img_size[0] // patch_size)
         elif len(img_size)==2: # reid case
-            num_patches = (img_size[0] // patch_size) * (img_size[1] // patch_size)
+            num_patches_width = 1 + (img_size[0] - patch_size) // stride_size
+            num_patches_height = 1 + (img_size[1] - patch_size) // stride_size
+            num_patches = num_patches_width * num_patches_height
+            # num_patches = (img_size[0] // patch_size) * (img_size[1] // patch_size)
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = num_patches
-
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.stride_size = stride_size
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride_size)
 
     def forward(self, x):
         B, C, H, W = x.shape
@@ -144,7 +147,7 @@ class VisionTransformer(nn.Module):
         self.num_features = self.embed_dim = embed_dim
         self.img_size = img_size
         self.patch_embed = PatchEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
+            img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,stride_size=kwargs['stride_size'])
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -185,16 +188,18 @@ class VisionTransformer(nn.Module):
 
         elif len(self.img_size)==2:
             ratio = self.img_size[0]//self.img_size[1]
-            original_num_patches_vertically = int(ratio*math.sqrt(N//ratio))
-            original_num_patches_horizontally= int(math.sqrt(N//ratio))
+            original_num_patches_horizontally = int(math.sqrt(N // ratio))
+            original_num_patches_vertically = N//original_num_patches_horizontally
+            # original_num_patches_horizontally= int(math.sqrt(N//ratio))
         if npatch == N and w == h:
             return self.pos_embed
         class_pos_embed = self.pos_embed[:, 0]
         patch_pos_embed = self.pos_embed[:, 1:]
         # 예상되는 패치의 개수 계산
-        num_patches_vertically = h // self.patch_embed.patch_size
-        num_patches_horizontally = w // self.patch_embed.patch_size
-
+        # num_patches_vertically = h // self.patch_embed.patch_size
+        # num_patches_horizontally = w // self.patch_embed.patch_size
+        num_patches_horizontally = 1 + (w - self.patch_embed.patch_size) // self.patch_embed.stride_size
+        num_patches_vertically = 1 + (h - self.patch_embed.patch_size) // self.patch_embed.stride_size
         dim = x.shape[-1]
         w0 = w // self.patch_embed.patch_size
         h0 = h // self.patch_embed.patch_size
@@ -203,7 +208,7 @@ class VisionTransformer(nn.Module):
         w0, h0 = w0 + 0.1, h0 + 0.1
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.reshape(1, original_num_patches_vertically, original_num_patches_horizontally, dim).permute(0, 3, 1, 2),
-            scale_factor=(num_patches_horizontally / original_num_patches_horizontally, num_patches_vertically / original_num_patches_vertically),
+            scale_factor=(num_patches_vertically / original_num_patches_vertically, num_patches_horizontally / original_num_patches_horizontally),
             mode='bicubic',
         )
         assert patch_pos_embed.shape[-2] == num_patches_vertically and patch_pos_embed.shape[

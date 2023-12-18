@@ -129,6 +129,11 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+
+
+    # OLP+SIE
+    parser.add_argument("--stride_size", default=16, type=int, help="Please ignore and do not set this argument.")
+
     return parser
 
 
@@ -166,9 +171,10 @@ def train_dino(args):
         student = vits.__dict__[args.arch](
             patch_size=args.patch_size,
             drop_path_rate=args.drop_path_rate,  # stochastic depth
-            img_size=args.img_size
+            img_size=args.img_size,
+            stride_size=args.stride_size
         )
-        teacher = vits.__dict__[args.arch](patch_size=args.patch_size, img_size=args.img_size)
+        teacher = vits.__dict__[args.arch](patch_size=args.patch_size, img_size=args.img_size,stride_size=args.stride_size)
         embed_dim = student.embed_dim
     # if the network is a XCiT
     elif args.arch in torch.hub.list("facebookresearch/xcit:main"):
